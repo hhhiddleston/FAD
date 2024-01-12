@@ -59,17 +59,18 @@ def cifar_dataloader(args):
 
 def compas_dataloader(args):
     x_data, YL, x_control = load_compas_data()
-    YL = YL.reshape(-1, 1)
+    YL = YL.squeeze()
     # print(YL.shape)
     # YL = np.concatenate((~YL+2, YL), 1)
     # print(YL.shape)
+    x_control = np.where(x_control == 0, 1, 0)
     idx_train = random.sample(range(len(x_data)), int(0.8 * len(x_data)))
     idx_test = list(set(range(len(x_data))) - set(idx_train))
     idx_val = random.sample(idx_train, int(0.2 * len(idx_train)))
     idx_train = list(set(idx_train) - set(idx_val))
-    trn_ds = ColumnarDataset(x_data[idx_train, :], YL[idx_train, :], x_control[idx_train].astype(int), args.device)
-    val_ds = ColumnarDataset(x_data[idx_val, :], YL[idx_val, :], x_control[idx_val].astype(int), args.device)
-    test_ds = ColumnarDataset(x_data[idx_test, :], YL[idx_test, :], x_control[idx_test].astype(int), args.device)
+    trn_ds = ColumnarDataset(x_data[idx_train, :], YL[idx_train], x_control[idx_train].astype(int), args.device)
+    val_ds = ColumnarDataset(x_data[idx_val, :], YL[idx_val], x_control[idx_val].astype(int), args.device)
+    test_ds = ColumnarDataset(x_data[idx_test, :], YL[idx_test], x_control[idx_test].astype(int), args.device)
     all_ds = ColumnarDataset(x_data, YL, x_control.astype(int), args.device)
     return trn_ds, val_ds, test_ds, all_ds
 
@@ -141,59 +142,6 @@ def load_aif360_data(args):
     trn_ds = ColumnarDataset(train.features, train_one_hot, train.protected_attributes[:, 0].astype(int), device)
     val_ds = ColumnarDataset(valid.features, valid_one_hot, valid.protected_attributes[:, 0].astype(int), device)
     test_ds = ColumnarDataset(dataset_orig_test.features, test_one_hot, dataset_orig_test.protected_attributes[:, 0].astype(int), device)
-
-    return trn_ds, val_ds, test_ds
-
-
-
-def folktables_dataloader(args):
-    device = args.device
-    ACSIncome = folktables.BasicProblem(
-        features=[
-            'AGEP',
-            'COW',
-            'SCHL',
-            'MAR',
-            'OCCP',
-            'POBP',
-            'RELP',
-            'WKHP',
-            # 'SEX',
-            'RAC1P',
-        ],
-        target='PINCP',
-        target_transform=lambda x: x > 25000,
-        group='SEX',
-        preprocess=adult_filter,
-        postprocess=lambda x: np.nan_to_num(x, -1),
-    )
-
-    data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
-    # acs_data = data_source.get_data(states=["CA"], download=True)
-    acs_data = data_source.get_data(states=["TX"], download=True)
-    features, label, group = ACSIncome.df_to_numpy(acs_data)
-    label = label.astype('int')
-    gp1_idx = np.where(group == 1)
-    gp2_idx = np.where(group == 2)
-    group[gp1_idx] = 0
-    group[gp2_idx] = 1
-    scaler = StandardScaler()
-    features = scaler.fit_transform(features)
-
-    X_train, X_test, y_train, y_test, group_train, group_test = train_test_split(features, label, group, test_size=args.test_ratio, random_state=0)
-    X_train, X_valid, y_train, y_valid, group_train, group_valid = train_test_split(X_train, y_train, group_train, test_size=args.valid_ratio, random_state=0)
-
-    train_one_hot = np.zeros((y_train.shape[0], int(y_train.max()) + 1))
-    valid_one_hot = np.zeros((y_valid.shape[0], int(y_valid.max()) + 1))
-    test_one_hot = np.zeros((y_test.shape[0], int(y_test.max()) + 1))
-
-    train_one_hot[np.arange(y_train.shape[0]), y_train] = 1
-    valid_one_hot[np.arange(y_valid.shape[0]), y_valid] = 1
-    test_one_hot[np.arange(y_test.shape[0]), y_test] = 1
-
-    trn_ds = ColumnarDataset(X_train, train_one_hot, group_train, device)
-    val_ds = ColumnarDataset(X_valid, valid_one_hot, group_valid, device)
-    test_ds = ColumnarDataset(X_test, test_one_hot, group_test, device)
 
     return trn_ds, val_ds, test_ds
 
@@ -826,8 +774,7 @@ def load_data(args):
         trn_ds, val_ds, test_ds, all_ds = compas_dataloader(args)
         args.raw_dim = trn_ds.data.shape[1]
         print((len(trn_ds), len(val_ds), len(test_ds), len(all_ds), args.raw_dim)) # (3694, 1584, 1584, 8)
-        args.num_class = 2
-        args.k = 200
+        args.k = 2000
 
     elif args.dataset == 'mnistandusps':
         trn_ds, val_ds, test_ds, all_ds = mnistplususps_dataloader(args)

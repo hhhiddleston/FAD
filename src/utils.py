@@ -24,6 +24,8 @@ parent_path = os.path.abspath(os.path.join(dir_path, os.pardir))
 def accuracy(output, labels):
     # preds = output.max(1)[1].type_as(labels)
     preds = output
+    print(preds.shape)
+    print(labels.shape)
     correct = preds.eq(labels).double()
     correct = correct.sum()
     return correct / len(labels)
